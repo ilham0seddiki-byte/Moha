@@ -257,22 +257,26 @@ const inWarranty = t => t.status === 'out' && t.warrantyDays > 0 && now() < warr
 const isLate = t => t.status === 'ready' && now() - t.readyAt > db.settings.reminderDays * DAY;
 const rest = t => Math.max(0, n(t.price) - n(t.advance));
 
-function message(type, t) {
-  const S = shopName(), name = t.name ? ` ${t.name}` : '';
+function message(type, t, other) {
+  const S = shopName(), name = !other && t.name ? ` ${t.name}` : '';
+  const yours = other ? `التيليفون ديال ${t.name || 'الكليان'}` : 'التيليفون ديالك';
   const sig = `\n— ${S}${db.settings.shopPhone ? ' · ' + db.settings.shopPhone : ''}`;
   switch (type) {
-    case 'in': return `السلام عليكم${name}،\nتوصلنا بالتيليفون ديالك (${t.model}) ف${S}.\nرقم التيكي: #${t.no}\nالمشكل: ${t.issue || '—'}${n(t.price) ? `\nالثمن التقريبي: ${moneyTxt(t.price)}` : ''}${n(t.advance) ? `\nالتسبيق: ${moneyTxt(t.advance)}` : ''}\nغادي نعلموك ملي يكون واجد ✅${sig}`;
-    case 'ready': return `السلام عليكم${name}،\nالتيليفون ديالك (${t.model}) واجد ✅\nرقم التيكي: #${t.no}\nالثمن: ${moneyTxt(t.price)}${n(t.advance) ? `\nالتسبيق: ${moneyTxt(t.advance)}\nالباقي: ${moneyTxt(rest(t))}` : ''}\nمرحبا بيك تجي تاخدو 🙏${sig}`;
-    case 'remind': return `السلام عليكم${name}،\nكنفكروك بلي التيليفون ديالك (${t.model}) واجد من ${fmtDate(t.readyAt)} وباقي كيتسناك عندنا.\nرقم التيكي: #${t.no}${sig}`;
+    case 'in': return `السلام عليكم${name}،\nتوصلنا ب${yours} (${t.model}) ف${S}.\nرقم التيكي: #${t.no}\nالمشكل: ${t.issue || '—'}${n(t.price) ? `\nالثمن التقريبي: ${moneyTxt(t.price)}` : ''}${n(t.advance) ? `\nالتسبيق: ${moneyTxt(t.advance)}` : ''}\nغادي نعلموك ملي يكون واجد ✅${sig}`;
+    case 'ready': return `السلام عليكم${name}،\n${yours} (${t.model}) واجد ✅\nرقم التيكي: #${t.no}\nالثمن: ${moneyTxt(t.price)}${n(t.advance) ? `\nالتسبيق: ${moneyTxt(t.advance)}\nالباقي: ${moneyTxt(rest(t))}` : ''}\nمرحبا بيك تجي تاخدو 🙏${sig}`;
+    case 'remind': return `السلام عليكم${name}،\nكنفكروك بلي ${yours} (${t.model}) واجد من ${fmtDate(t.readyAt)} وباقي كيتسناك عندنا.\nرقم التيكي: #${t.no}${sig}`;
     case 'out': return `شكرا${name} على الثقة 🙏\nالتيليفون (${t.model}) تسلم ليك.\n${t.warrantyDays > 0 ? `الضمانة: ${t.warrantyDays} يوم، حتى ل ${fmtDate(warrantyEnd(t))}.\nحتافظ على هاد الميساج.` : 'بلا ضمانة.'}\nرقم التيكي: #${t.no}${sig}`;
   }
   return '';
 }
-function sendWA(phone, text) {
+const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function sendTo(phone, text, via) {
   const num = waNum(phone);
-  if (!num) { toast('ماكاينش رقم التيليفون ديال الكليان'); return; }
-  window.open(`https://wa.me/${num}?text=${encodeURIComponent(text)}`, '_blank');
+  if (!num) { toast('ماكاينش رقم التيليفون'); return; }
+  if (via === 'sms') location.href = `sms:+${num}${isIOS ? '&' : '?'}body=${encodeURIComponent(text)}`;
+  else window.open(`https://wa.me/${num}?text=${encodeURIComponent(text)}`, '_blank');
 }
+const hasContact = t => !!(t.phone || t.phone2);
 const waType = t => t.status === 'ready' ? (isLate(t) ? 'remind' : 'ready') : t.status === 'out' ? 'out' : 'in';
 
 /* ================= UI state ================= */
@@ -339,7 +343,7 @@ function viewTickets() {
   const cur = fs.find(f => f.k === ui.filter) || fs[0];
   const q = ui.q.trim().toLowerCase();
   let list = db.tickets.filter(cur.f);
-  if (q) list = db.tickets.filter(t => [t.no, t.name, t.phone, t.model, t.issue].join(' ').toLowerCase().includes(q));
+  if (q) list = db.tickets.filter(t => [t.no, t.name, t.phone, t.phone2, t.model, t.issue].join(' ').toLowerCase().includes(q));
   list.sort((a, b) => b.createdAt - a.createdAt);
   const late = db.tickets.filter(isLate).length;
   return `
@@ -364,6 +368,12 @@ function ticketForm(t) {
       <label>رقم الكليان<input name="phone" type="tel" inputmode="tel" value="${h(e.phone)}" placeholder="06…"></label>
     </div>
     <div class="two">
+      <label>رقم آخر للتواصل<input name="phone2" type="tel" inputmode="tel" value="${h(e.phone2)}" placeholder="06…"></label>
+      <label>ديال شكون؟<input name="phone2Who" value="${h(e.phone2Who)}" placeholder="مثلا: خوه، مراتو" list="whos"></label>
+    </div>
+    <datalist id="whos">${['تيليفون آخر ديالو', 'خوه', 'ختو', 'باباه', 'ماماه', 'مراتو', 'راجلها', 'صاحبو'].map(x => `<option value="${x}">`).join('')}</datalist>
+    <span class="hint" style="margin-top:-6px">التيليفون ديال الكليان غادي يبقى عندك، داكشي علاش زيد رقم ديال شي واحد قريب منو باش يوصلو "واجد".</span>
+    <div class="two">
       <label>الثمن التقريبي<input name="price" inputmode="decimal" value="${e.price ? h(e.price) : ''}" placeholder="0"></label>
       <label>التسبيق<input name="advance" inputmode="decimal" value="${e.advance ? h(e.advance) : ''}" placeholder="0"></label>
     </div>
@@ -382,7 +392,7 @@ function ticketDetail(t) {
   if (t.status === 'fix') acts.push(`<button class="btn pri full" data-act="toReady" data-id="${t.id}">✅ واجد</button>`);
   if (t.status === 'ready') acts.push(`<button class="btn pri full" data-act="toOut" data-id="${t.id}">📦 تسلم للكليان</button>`);
   if (t.status === 'out' && inWarranty(t)) acts.push(`<button class="btn full" data-act="warrantyBack" data-id="${t.id}">🛡️ رجع فالضمانة</button>`);
-  const waLbl = { in: 'صيفط "توصلنا بيه"', ready: 'صيفط "واجد"', remind: 'فكّرو بالواتساب', out: 'صيفط الضمانة' }[waType(t)];
+  const waLbl = { in: 'صيفط "توصلنا بيه"', ready: 'صيفط "واجد"', remind: 'فكّرو', out: 'صيفط الضمانة' }[waType(t)];
   acts.push(`<button class="btn wa full" data-act="wa" data-id="${t.id}">💬 ${waLbl}</button>`);
   return `<div class="row"><h2 class="grow">#<span class="num">${t.no}</span> · ${h(t.model)}</h2><span class="pill ${isLate(t) ? 'late' : 's-' + t.status}">${isLate(t) ? 'ما رجعش' : ST[t.status]}</span></div>
   <div class="tl">${steps.map((s, i) => `<div class="${i <= idx ? 'done' : ''}">${ST[s]}</div>`).join('')}</div>
@@ -390,6 +400,7 @@ function ticketDetail(t) {
   <dl class="kv">
     <dt>الكليان</dt><dd>${h(t.name || '—')}</dd>
     <dt>التيليفون</dt><dd>${t.phone ? `<a href="tel:${h(t.phone)}" class="num">${h(t.phone)}</a>` : '—'}</dd>
+    ${t.phone2 ? `<dt>رقم آخر</dt><dd><a href="tel:${h(t.phone2)}" class="num">${h(t.phone2)}</a>${t.phone2Who ? ' · ' + h(t.phone2Who) : ''}</dd>` : ''}
     <dt>المشكل</dt><dd>${h(t.issue || '—')}</dd>
     ${t.code ? `<dt>الكود</dt><dd class="num">${h(t.code)}</dd>` : ''}
     <dt>الثمن</dt><dd>${money(t.price)}</dd>
@@ -439,10 +450,18 @@ function outSheet(t) {
 }
 
 function askSend(t, type, title) {
-  openSheet(`<h2>${title}</h2>
-    <p class="hint">نصيفطو ميساج للكليان${t.name ? ' ' + h(t.name) : ''} فالواتساب؟</p>
-    <div class="card" style="padding:12px 14px;white-space:pre-wrap;font-size:14.5px">${h(message(type, t))}</div>
-    <div class="btns"><button class="btn wa" data-act="waNow" data-id="${t.id}" data-type="${type}">💬 صيفط</button><button class="btn ghost" data-act="close">لا، شكرا</button></div>`);
+  const nums = [['phone2', t.phone2, t.phone2Who ? `${t.phone2Who}` : 'الرقم الآخر'], ['phone', t.phone, 'الكليان']].filter(x => x[1]);
+  const atShop = t.status !== 'out';
+  openSheet(`<h2>${title || 'صيفط ميساج'}</h2>
+    <div class="card" style="padding:12px 14px;white-space:pre-wrap;font-size:14.5px">${h(message(type, t, nums[0] && nums[0][0] === 'phone2'))}</div>
+    ${atShop && t.phone && !t.phone2 ? '<p class="hint">⚠️ التيليفون ديال الكليان عندك فالحانوت. إلا ماعندوش الواتساب فشي جهاز آخر، الميساج غادي يوصلو غير ملي ياخدو. عيّط ليه ولا زيد رقم آخر فـ ✏️ تعديل.</p>' : ''}
+    ${nums.map(([k, num, who]) => `<div class="sec">${h(who)} · <span class="num">${h(num)}</span>${k === 'phone' && atShop && t.phone2 ? ' (التيليفون عندك)' : ''}</div>
+      <div class="row" style="gap:8px">
+        <button class="btn wa grow" data-act="send" data-id="${t.id}" data-type="${type}" data-k="${k}" data-via="wa">💬 واتساب</button>
+        <button class="btn grow" data-act="send" data-id="${t.id}" data-type="${type}" data-k="${k}" data-via="sms">📩 SMS</button>
+        <a class="btn" href="tel:${h(num)}" aria-label="عيّط">📞</a>
+      </div>`).join('')}
+    <button class="btn ghost block" style="margin-top:14px" data-act="close">ماشي دابا</button>`);
 }
 
 /* ---------- Stock ---------- */
@@ -660,7 +679,7 @@ function settingsSheet() {
     <label class="btn" style="cursor:pointer">⬆️ رجّع نسخة<input type="file" accept="application/json,.json" data-act-change="importData" hidden></label>
     <button class="btn dan full" data-act="resetAll">🗑 مسح كلشي</button>
   </div>
-  <p class="hint" style="text-align:center;margin-top:18px">واجد · النسخة 1.0</p>`;
+  <p class="hint" style="text-align:center;margin-top:18px">واجد · النسخة 1.1</p>`;
 }
 
 /* ================= Actions ================= */
@@ -678,8 +697,8 @@ const A = {
   toReady: d => { sheetCtx = { id: d.id, src: '' }; openSheet(readySheet(tById(d.id)), sheetCtx); },
   pickSrc: d => { const t = tById(sheetCtx.id); sheetCtx.src = d.src; const keep = { id: t.id, src: d.src }; openSheet(readySheet(t), keep); },
   toOut: d => openSheet(outSheet(tById(d.id)), { id: d.id }),
-  wa: d => { const t = tById(d.id); sendWA(t.phone, message(waType(t), t)); },
-  waNow: d => { const t = tById(d.id); sendWA(t.phone, message(d.type, t)); closeSheet(); },
+  wa: d => { const t = tById(d.id); if (!hasContact(t)) { toast('ماكاين حتى رقم. زيدو فـ ✏️ تعديل'); return; } askSend(t, waType(t)); },
+  send: d => { const t = tById(d.id); sendTo(t[d.k], message(d.type, t, d.k === 'phone2'), d.via); },
   warrantyBack: d => {
     const o = tById(d.id);
     const t = { id: uid(), no: db.seq++, name: o.name, phone: o.phone, model: o.model, issue: 'ضمانة: ' + (o.issue || ''), code: o.code, price: 0, advance: 0, notes: '', status: 'in', createdAt: now(), warrantyOf: o.id };
@@ -769,14 +788,14 @@ function undoPart(t) {
 /* ================= Forms ================= */
 const F = {
   ticket: v => {
-    const fields = { model: v.model.trim(), issue: v.issue.trim(), name: v.name.trim(), phone: v.phone.trim(), price: n(v.price), advance: n(v.advance), code: v.code.trim(), notes: v.notes.trim() };
+    const fields = { model: v.model.trim(), issue: v.issue.trim(), name: v.name.trim(), phone: v.phone.trim(), phone2: v.phone2.trim(), phone2Who: v.phone2Who.trim(), price: n(v.price), advance: n(v.advance), code: v.code.trim(), notes: v.notes.trim() };
     if (v.id) {
       const t = tById(v.id); Object.assign(t, fields); save(); render(); openSheet(ticketDetail(t), { id: t.id }); toast('تحفظ ✓');
     } else {
       const t = Object.assign({ id: uid(), no: db.seq++, status: 'in', createdAt: now() }, fields);
       db.tickets.push(t); save();
       ui.filter = 'active'; ui.q = ''; render();
-      if (t.phone) askSend(t, 'in', `✓ تسجل التيكي #${t.no}`); else { closeSheet(); toast(`✓ تسجل التيكي #${t.no}`); }
+      if (hasContact(t)) askSend(t, 'in', `✓ تسجل التيكي #${t.no}`); else { closeSheet(); toast(`✓ تسجل التيكي #${t.no}`); }
     }
   },
   ready: v => {
@@ -800,13 +819,13 @@ const F = {
     t.part = part; t.price = n(v.price); t.warrantyDays = Math.max(0, parseInt(v.warrantyDays) || 0);
     t.status = 'ready'; t.readyAt = now(); if (!t.fixAt) t.fixAt = t.readyAt;
     save(); render();
-    if (t.phone) askSend(t, 'ready', `✅ #${t.no} واجد`); else { closeSheet(); toast(`✅ #${t.no} واجد`); }
+    if (hasContact(t)) askSend(t, 'ready', `✅ #${t.no} واجد`); else { closeSheet(); toast(`✅ #${t.no} واجد`); }
   },
   out: v => {
     const t = tById(sheetCtx.id);
     t.price = n(v.price); t.warrantyDays = Math.max(0, parseInt(v.warrantyDays) || 0);
     t.status = 'out'; t.outAt = now(); save(); render();
-    if (t.phone) askSend(t, 'out', `📦 #${t.no} تسلم`); else { closeSheet(); toast(`📦 #${t.no} تسلم`); }
+    if (hasContact(t)) askSend(t, 'out', `📦 #${t.no} تسلم`); else { closeSheet(); toast(`📦 #${t.no} تسلم`); }
   },
   stock: v => {
     const f = { name: v.name.trim(), model: v.model.trim(), qty: Math.max(0, parseInt(v.qty) || 0), cost: n(v.cost) };
