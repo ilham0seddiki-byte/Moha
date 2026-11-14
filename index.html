@@ -154,6 +154,16 @@ nav.tabs button.on{color:var(--brand)}
   text-align:center;transform:translateY(-150%);transition:transform .25s;max-width:520px;margin:0 auto}
 .toast.on{transform:none}
 .spacer{height:70px}
+.f label.chip{flex-direction:row;align-items:center;color:var(--ink);font-size:14px;gap:6px}
+.thumb{width:58px;height:58px;border-radius:12px;object-fit:cover;flex:none;background:var(--bg);display:grid;place-items:center;font-size:26px}
+.photo{border:2px dashed var(--line);border-radius:14px;min-height:90px;display:grid;place-items:center;color:var(--muted);font-weight:700;cursor:pointer;overflow:hidden;background:var(--bg);text-align:center;padding:4px}
+.photo img{width:100%;max-height:260px;object-fit:cover;display:block}
+.hero{width:100%;max-height:300px;object-fit:cover;border-radius:16px;margin-bottom:10px;display:block}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--line);border-radius:12px;padding:3px;gap:3px;margin-bottom:12px}
+.seg button{border:0;background:none;border-radius:10px;padding:8px;font-weight:700;color:var(--muted);cursor:pointer}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
+.pill.match,.banner.match{background:var(--ready-bg);color:var(--ready)}
+.pill.old{background:var(--warn-bg);color:var(--warn)}
 </style>
 </head>
 <body>
@@ -171,7 +181,7 @@ nav.tabs button.on{color:var(--brand)}
   <button data-act="tab" data-tab="stock"><i>📦</i>الستوك</button>
   <button data-act="tab" data-tab="money"><i>💰</i>الحسابات</button>
   <button data-act="tab" data-tab="credit"><i>🤝</i>الكريدي</button>
-  <button data-act="tab" data-tab="used"><i>📱</i>المستعمل</button>
+  <button data-act="tab" data-tab="used"><i>📱</i>البيع</button>
 </nav>
 <div class="scrim" id="scrim" data-act="close"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
@@ -184,8 +194,8 @@ const KEY = 'wajed_v1';
 const DAY = 864e5;
 const DEF = {
   v: 1, seq: 1,
-  settings: { shopName: '', shopPhone: '', shopAddr: '', warrantyDays: 30, reminderDays: 3, lowStock: 1 },
-  tickets: [], stock: [], credits: [], used: [], expenses: []
+  settings: { shopName: '', shopPhone: '', shopAddr: '', warrantyDays: 30, usedWarrantyDays: 7, reminderDays: 3, lowStock: 1 },
+  tickets: [], stock: [], credits: [], used: [], expenses: [], sales: [], wants: []
 };
 const clone = o => JSON.parse(JSON.stringify(o));
 function load() {
@@ -242,6 +252,7 @@ function toast(msg) {
   clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2600);
 }
 const shopName = () => db.settings.shopName || 'الحانوت';
+const fi = () => /^[\u0600-\u06ff]/.test(shopName()) ? 'ف' + shopName() : 'ف ' + shopName();
 
 /* ================= Tickets logic ================= */
 const ST = { in: 'تسلم', fix: 'فالإصلاح', ready: 'واجد', out: 'تسلم للكليان' };
@@ -262,7 +273,7 @@ function message(type, t, other) {
   const yours = other ? `التيليفون ديال ${t.name || 'الكليان'}` : 'التيليفون ديالك';
   const sig = `\n— ${S}${db.settings.shopPhone ? ' · ' + db.settings.shopPhone : ''}`;
   switch (type) {
-    case 'in': return `السلام عليكم${name}،\nتوصلنا ب${yours} (${t.model}) ف${S}.\nرقم التيكي: #${t.no}\nالمشكل: ${t.issue || '—'}${n(t.price) ? `\nالثمن التقريبي: ${moneyTxt(t.price)}` : ''}${n(t.advance) ? `\nالتسبيق: ${moneyTxt(t.advance)}` : ''}\nغادي نعلموك ملي يكون واجد ✅${sig}`;
+    case 'in': return `السلام عليكم${name}،\nتوصلنا ب${yours} (${t.model}) ${fi()}.\nرقم التيكي: #${t.no}\nالمشكل: ${t.issue || '—'}${n(t.price) ? `\nالثمن التقريبي: ${moneyTxt(t.price)}` : ''}${n(t.advance) ? `\nالتسبيق: ${moneyTxt(t.advance)}` : ''}\nغادي نعلموك ملي يكون واجد ✅${sig}`;
     case 'ready': return `السلام عليكم${name}،\n${yours} (${t.model}) واجد ✅\nرقم التيكي: #${t.no}\nالثمن: ${moneyTxt(t.price)}${n(t.advance) ? `\nالتسبيق: ${moneyTxt(t.advance)}\nالباقي: ${moneyTxt(rest(t))}` : ''}\nمرحبا بيك تجي تاخدو 🙏${sig}`;
     case 'remind': return `السلام عليكم${name}،\nكنفكروك بلي ${yours} (${t.model}) واجد من ${fmtDate(t.readyAt)} وباقي كيتسناك عندنا.\nرقم التيكي: #${t.no}${sig}`;
     case 'out': return `شكرا${name} على الثقة 🙏\nالتيليفون (${t.model}) تسلم ليك.\n${t.warrantyDays > 0 ? `الضمانة: ${t.warrantyDays} يوم، حتى ل ${fmtDate(warrantyEnd(t))}.\nحتافظ على هاد الميساج.` : 'بلا ضمانة.'}\nرقم التيكي: #${t.no}${sig}`;
@@ -280,7 +291,7 @@ const hasContact = t => !!(t.phone || t.phone2);
 const waType = t => t.status === 'ready' ? (isLate(t) ? 'remind' : 'ready') : t.status === 'out' ? 'out' : 'in';
 
 /* ================= UI state ================= */
-const ui = { tab: 'tickets', filter: 'active', q: '', period: 'week', sq: '', uq: '' };
+const ui = { tab: 'tickets', filter: 'active', q: '', period: 'week', sq: '', uq: '', usub: 'sale' };
 try { const s = JSON.parse(sessionStorage.getItem('wajed_ui')); if (s) Object.assign(ui, s, { q: '', sq: '', uq: '' }); } catch (e) {}
 const keepUI = () => { try { sessionStorage.setItem('wajed_ui', JSON.stringify(ui)); } catch (e) {} };
 
@@ -391,6 +402,7 @@ function ticketDetail(t) {
   if (t.status === 'in') acts.push(`<button class="btn" data-act="toFix" data-id="${t.id}">🔧 بدا الإصلاح</button>`, `<button class="btn pri" data-act="toReady" data-id="${t.id}">✅ واجد</button>`);
   if (t.status === 'fix') acts.push(`<button class="btn pri full" data-act="toReady" data-id="${t.id}">✅ واجد</button>`);
   if (t.status === 'ready') acts.push(`<button class="btn pri full" data-act="toOut" data-id="${t.id}">📦 تسلم للكليان</button>`);
+  if (hasContact(t) && db.used.some(u => !u.soldAt)) acts.push(`<button class="btn full" data-act="offerPick" data-id="${t.id}">📱 عرض عليه تيليفون للبيع</button>`);
   if (t.status === 'out' && inWarranty(t)) acts.push(`<button class="btn full" data-act="warrantyBack" data-id="${t.id}">🛡️ رجع فالضمانة</button>`);
   const waLbl = { in: 'صيفط "توصلنا بيه"', ready: 'صيفط "واجد"', remind: 'فكّرو', out: 'صيفط الضمانة' }[waType(t)];
   acts.push(`<button class="btn wa full" data-act="wa" data-id="${t.id}">💬 ${waLbl}</button>`);
@@ -445,24 +457,40 @@ function outSheet(t) {
     <div class="two"><label>الثمن النهائي<input name="price" inputmode="decimal" value="${n(t.price) || ''}"></label>
     <label>الضمانة (أيام)<input name="warrantyDays" inputmode="numeric" value="${t.warrantyDays ?? db.settings.warrantyDays}"></label></div>
     ${n(t.advance) ? `<div class="card stat"><div class="l">خاص الكليان يخلّص</div><div class="v">${money(rest(t))}</div><div class="hint">(خلّص تسبيق ${money(t.advance)})</div></div>` : ''}
+    ${(() => { const acc = db.stock.filter(x => x.kind === 'acc' && x.qty > 0 && n(x.sellPrice));
+      return acc.length ? `<div><div class="hint" style="font-weight:700;margin-bottom:6px">🛍️ اقترح عليه (بروتيكتور، كوك…): شنو زاد شرا؟</div>
+      <div class="chips" style="flex-wrap:wrap;margin:0;padding:0">${acc.map(x => `<label class="chip" style="display:flex;align-items:center;gap:6px"><input type="checkbox" name="acc_${x.id}" style="width:auto;margin:0">${h(x.name)}${x.model ? ' · ' + h(x.model) : ''} <em class="num">${Math.round(n(x.sellPrice))}</em></label>`).join('')}</div></div>` : ''; })()}
     <button class="btn pri block">📦 أكّد التسليم</button>
   </form>`;
 }
 
-function askSend(t, type, title) {
-  const nums = [['phone2', t.phone2, t.phone2Who ? `${t.phone2Who}` : 'الرقم الآخر'], ['phone', t.phone, 'الكليان']].filter(x => x[1]);
-  const atShop = t.status !== 'out';
-  openSheet(`<h2>${title || 'صيفط ميساج'}</h2>
-    <div class="card" style="padding:12px 14px;white-space:pre-wrap;font-size:14.5px">${h(message(type, t, nums[0] && nums[0][0] === 'phone2'))}</div>
-    ${atShop && t.phone && !t.phone2 ? '<p class="hint">⚠️ التيليفون ديال الكليان عندك فالحانوت. إلا ماعندوش الواتساب فشي جهاز آخر، الميساج غادي يوصلو غير ملي ياخدو. عيّط ليه ولا زيد رقم آخر فـ ✏️ تعديل.</p>' : ''}
-    ${nums.map(([k, num, who]) => `<div class="sec">${h(who)} · <span class="num">${h(num)}</span>${k === 'phone' && atShop && t.phone2 ? ' (التيليفون عندك)' : ''}</div>
+/* targets: [{ who, num, text }] */
+function sendSheet(title, targets, note = '') {
+  openSheet(`<h2>${title}</h2>
+    <div class="card" style="padding:12px 14px;white-space:pre-wrap;font-size:14.5px">${h(targets[0]?.text || '')}</div>
+    ${note ? `<p class="hint">${note}</p>` : ''}
+    ${targets.map((x, i) => `<div class="sec">${h(x.who)} · <span class="num">${h(x.num)}</span></div>
       <div class="row" style="gap:8px">
-        <button class="btn wa grow" data-act="send" data-id="${t.id}" data-type="${type}" data-k="${k}" data-via="wa">💬 واتساب</button>
-        <button class="btn grow" data-act="send" data-id="${t.id}" data-type="${type}" data-k="${k}" data-via="sms">📩 SMS</button>
-        <a class="btn" href="tel:${h(num)}" aria-label="عيّط">📞</a>
+        <button class="btn wa grow" data-act="sendRaw" data-i="${i}" data-via="wa">💬 واتساب</button>
+        <button class="btn grow" data-act="sendRaw" data-i="${i}" data-via="sms">📩 SMS</button>
+        <a class="btn" href="tel:${h(x.num)}" aria-label="عيّط">📞</a>
       </div>`).join('')}
-    <button class="btn ghost block" style="margin-top:14px" data-act="close">ماشي دابا</button>`);
+    <button class="btn ghost block" style="margin-top:14px" data-act="close">ماشي دابا</button>`, { msgs: targets });
 }
+function askSend(t, type, title) {
+  const atShop = t.status !== 'out';
+  const targets = [];
+  if (t.phone2) targets.push({ who: t.phone2Who || 'الرقم الآخر', num: t.phone2, text: message(type, t, true) });
+  if (t.phone) targets.push({ who: 'الكليان' + (atShop && t.phone2 ? ' (التيليفون عندك)' : ''), num: t.phone, text: message(type, t, false) });
+  const note = atShop && t.phone && !t.phone2 ? '⚠️ التيليفون ديال الكليان عندك فالحانوت. إلا ماعندوش الواتساب فشي جهاز آخر، الميساج غادي يوصلو غير ملي ياخدو. عيّط ليه ولا زيد رقم آخر فـ ✏️ تعديل.' : '';
+  sendSheet(title || 'صيفط ميساج', targets, note);
+}
+const ticketTargets = (t, textFn) => {
+  const r = [];
+  if (t.phone2) r.push({ who: t.phone2Who || 'الرقم الآخر', num: t.phone2, text: textFn(true) });
+  if (t.phone) r.push({ who: t.name || 'الكليان', num: t.phone, text: textFn(false) });
+  return r;
+};
 
 /* ---------- Stock ---------- */
 function viewStock() {
@@ -479,20 +507,23 @@ function viewStock() {
     <div class="list">${list.length ? list.map(s => `<div class="card tk ${s.qty <= db.settings.lowStock ? 'low' : ''}" style="cursor:default">
       <div class="row"><div class="grow" data-act="editStock" data-id="${s.id}" style="cursor:pointer">
         <div class="tk-model">${h(s.name)} ${s.qty <= db.settings.lowStock ? `<span class="tag">${s.qty ? 'قليلة' : 'سالات'}</span>` : ''}</div>
-        <div class="tk-sub">${s.model ? `<span>📱 ${h(s.model)}</span>` : ''}${n(s.cost) ? `<span>شريتها ب ${money(s.cost)}</span>` : ''}</div></div>
+        <div class="tk-sub">${s.kind === 'acc' ? '<span>🛍️ أكسسوار</span>' : ''}${s.model ? `<span>📱 ${h(s.model)}</span>` : ''}${n(s.cost) ? `<span>شرا ${money(s.cost)}</span>` : ''}${n(s.sellPrice) ? `<span>بيع ${money(s.sellPrice)}</span>` : ''}</div>
+        ${n(s.sellPrice) && s.qty > 0 ? `<button class="btn sm" style="margin-top:6px" data-act="quickSale" data-id="${s.id}">💵 بيع</button>` : ''}</div>
         <div class="qty"><button data-act="qty" data-id="${s.id}" data-d="-1" aria-label="نقص">−</button><b class="num">${s.qty}</b><button data-act="qty" data-id="${s.id}" data-d="1" aria-label="زيد">+</button></div>
       </div></div>`).join('') : `<div class="empty"><i>📦</i>${db.stock.length ? 'ماكاين والو' : 'الستوك خاوي. زيد القطع اللي عندك.'}</div>`}</div>
     <div class="spacer"></div>
-    <button class="fab" data-act="newStock">＋ قطعة</button>`;
+    <button class="fab" data-act="newStock">＋ قطعة / أكسسوار</button>`;
 }
 function stockForm(s) {
   const e = s || {};
   return `<h2>${s ? 'تعديل القطعة' : 'قطعة جديدة'}</h2>
   <form class="f" data-form="stock" autocomplete="off"><input type="hidden" name="id" value="${h(e.id || '')}">
     <label>السمية ديال القطعة *<input name="name" required value="${h(e.name)}" placeholder="مثلا: شاشة، بطارية، كونيكتور" autofocus></label>
+    <label>النوع<select name="kind"><option value="part">🔧 قطعة غيار</option><option value="acc" ${e.kind === 'acc' ? 'selected' : ''}>🛍️ أكسسوار (كوك، بروتيكتور، شارجور…)</option></select></label>
     <label>لأي تيليفون<input name="model" value="${h(e.model)}" placeholder="مثلا: iPhone 11"></label>
     <div class="two"><label>الكمية<input name="qty" inputmode="numeric" value="${e.qty ?? 1}"></label>
     <label>ثمن الشرا (للوحدة)<input name="cost" inputmode="decimal" value="${e.cost ? h(e.cost) : ''}" placeholder="0"></label></div>
+    <label>ثمن البيع<input name="sellPrice" inputmode="decimal" value="${e.sellPrice ? h(e.sellPrice) : ''}" placeholder="إلا كتبيعها بوحدها"></label>
     <button class="btn pri block">حفظ</button>
     ${s ? `<button type="button" class="btn dan block" data-act="delStock" data-id="${s.id}">🗑 حذف القطعة</button>` : ''}
   </form>`;
@@ -515,7 +546,10 @@ function viewMoney() {
   const uProfit = sold.reduce((s, u) => s + n(u.sellPrice) - n(u.buyPrice), 0);
   const exps = db.expenses.filter(x => x.date >= from);
   const expT = exps.reduce((s, x) => s + n(x.amount), 0);
-  const net = rev - cost + uProfit - expT;
+  const sl = db.sales.filter(x => x.date >= from);
+  const sProfit = sl.reduce((s, x) => s + n(x.price) - n(x.cost), 0);
+  const sCount = sl.reduce((s, x) => s + x.qty, 0);
+  const net = rev - cost + uProfit + sProfit - expT;
   const bySrc = Object.keys(SRC).map(k => [k, done.filter(t => t.part?.src === k).length]);
   // last 8 weeks
   const w0 = startOfWeek();
@@ -528,7 +562,7 @@ function viewMoney() {
   const periods = [['day', 'اليوم'], ['week', 'هاد السيمانة'], ['month', 'هاد الشهر'], ['all', 'الكل']];
   return `
     <div class="chips" style="padding-top:0">${periods.map(([k, l]) => `<button class="chip ${ui.period === k ? 'on' : ''}" data-act="period" data-p="${k}">${l}</button>`).join('')}</div>
-    <div class="card stat big" style="margin-top:8px"><div class="l">الربح الصافي</div><div class="v">${money(net)}</div><div class="l">الإصلاح + المستعمل − المصاريف</div></div>
+    <div class="card stat big" style="margin-top:8px"><div class="l">الربح الصافي</div><div class="v">${money(net)}</div><div class="l">الإصلاح + المستعمل + الأكسسوار − المصاريف</div></div>
     <div class="grid2" style="margin-top:10px">
       <div class="card stat"><div class="v num">${done.length}</div><div class="l">تيليفون تصلح وتسلم</div></div>
       <div class="card stat"><div class="v">${money(rev)}</div><div class="l">المدخول ديال الإصلاح</div></div>
@@ -539,6 +573,7 @@ function viewMoney() {
       <div class="line"><span>ثمن القطع</span><b class="neg">− ${money(cost)}</b></div>
       <div class="line"><span>ربح الإصلاح</span><b class="pos">${money(rev - cost)}</b></div>
       <div class="line"><span>ربح المستعمل (<span class="num">${sold.length}</span> تباع)</span><b class="${uProfit >= 0 ? 'pos' : 'neg'}">${money(uProfit)}</b></div>
+      <div class="line"><span>ربح الأكسسوار (<span class="num">${sCount}</span> تباع)</span><b class="${sProfit >= 0 ? 'pos' : 'neg'}">${money(sProfit)}</b></div>
       <div class="line"><span>المصاريف</span><b class="neg">− ${money(expT)}</b></div>
     </div>
     <div class="sec">القطع: منين جات</div>
@@ -596,69 +631,253 @@ function shopSheet(shop) {
       <span class="row"><b class="${c.dir === 'they' ? 'pos' : 'neg'}">${money(c.amount)}</b><button class="btn ghost sm" data-act="delCredit" data-id="${c.id}" data-shop="${h(shop)}" aria-label="حذف">✕</button></span></div>`).join('')}</div>`;
 }
 
-/* ---------- Used phones ---------- */
+/* ---------- Sales: used phones, client wants, accessories ---------- */
+const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9؀-ۿ]+/g, ' ').trim();
+function wantMatches(w, u) {
+  if (!w || w.done || !u || u.soldAt) return false;
+  const toks = norm(w.model).split(' ').filter(Boolean);
+  if (!toks.length) return false;
+  const m = norm(u.model), words = m.split(' ');
+  const ok = toks.every(t => words.includes(t) || (t.length >= 4 && m.includes(t)));
+  if (!ok) return false;
+  if (n(w.budget) && n(u.askPrice) && n(u.askPrice) > n(w.budget) * 1.1) return false;
+  return true;
+}
+const matchingWants = u => db.wants.filter(w => wantMatches(w, u));
+const daysIn = u => Math.floor(((u.soldAt || now()) - u.boughtAt) / DAY);
+const sig = () => `\n— ${shopName()}${db.settings.shopPhone ? ' · ' + db.settings.shopPhone : ''}${db.settings.shopAddr ? '\n📍 ' + db.settings.shopAddr : ''}`;
+function offerText(u, name) {
+  const wd = db.settings.usedWarrantyDays;
+  return `السلام عليكم${name ? ' ' + name : ''}،\nعندنا ${fi()}:\n📱 ${u.model}${u.notes ? '\n' + u.notes : ''}${n(u.askPrice) ? `\n💵 الثمن: ${moneyTxt(u.askPrice)}` : ''}${wd ? `\n✅ مضمون ${wd} يوم` : ''}\nإلا عجبك دوز تشوفو 🙏${sig()}`;
+}
+function receiptText(u) {
+  const end = u.soldAt + (u.soldWarranty || 0) * DAY;
+  return `🧾 وصل البيع · ${shopName()}\n\nالتيليفون: ${u.model}\nIMEI: ${u.imei}${u.imei2 ? '\nIMEI 2: ' + u.imei2 : ''}\nالثمن: ${moneyTxt(u.sellPrice)}\nالتاريخ: ${fmtDate(u.soldAt)}\n${u.soldWarranty ? `الضمانة: ${u.soldWarranty} يوم، حتى ل ${fmtDate(end)}` : 'بلا ضمانة'}\n\nحتافظ على هاد الميساج. شكرا على الثقة 🙏${sig()}`;
+}
+function listText() {
+  const av = db.used.filter(u => !u.soldAt).sort((a, b) => n(a.askPrice) - n(b.askPrice));
+  const wd = db.settings.usedWarrantyDays;
+  return `📱 التيليفونات المتوفرة ${fi()}:\n\n${av.map(u => `• ${u.model}${n(u.askPrice) ? ' · ' + moneyTxt(u.askPrice) : ''}${u.notes ? ' (' + u.notes + ')' : ''}`).join('\n')}\n${wd ? `\n✅ كلهم مضمونين ${wd} يوم` : ''}${sig()}`;
+}
+
+function usedCard(u) {
+  const mw = u.soldAt ? 0 : matchingWants(u).length, d = daysIn(u);
+  return `<button class="card tk" data-act="usedOne" data-id="${u.id}"><div class="row" style="align-items:flex-start">
+    ${u.photo ? `<img class="thumb" src="${u.photo}" alt="">` : '<span class="thumb">📱</span>'}
+    <div class="grow">
+      <div class="tk-top"><span class="tk-model">${h(u.model)}</span><span class="pill ${u.soldAt ? 's-out' : 's-ready'}">${u.soldAt ? 'تباع' : 'للبيع'}</span></div>
+      <div class="tk-sub">${u.soldAt ? `<span>تباع ب ${money(u.sellPrice)}</span><span class="${n(u.sellPrice) - n(u.buyPrice) >= 0 ? 'pos' : 'neg'}">ربح ${money(n(u.sellPrice) - n(u.buyPrice))}</span>` : `<span>${n(u.askPrice) ? '💵 ' + money(u.askPrice) : '<span class="neg">ماعندوش ثمن!</span>'}</span><span>شرا ${money(u.buyPrice)}</span>`}</div>
+      <div class="tk-sub">${mw ? `<span class="pill match">👥 ${mw} كليان باغيه</span>` : ''}${!u.soldAt && d >= 21 ? `<span class="pill old">⏳ ${d} يوم عندك</span>` : ''}<span class="num">IMEI …${h(String(u.imei).slice(-5))}</span></div>
+    </div></div></button>`;
+}
 function viewUsed() {
+  const seg = `<div class="seg"><button class="${ui.usub !== 'wants' ? 'on' : ''}" data-act="usub" data-s="sale">📱 للبيع</button><button class="${ui.usub === 'wants' ? 'on' : ''}" data-act="usub" data-s="wants">🙋 طلبات الكليان <span class="num">${db.wants.filter(w => !w.done).length}</span></button></div>`;
+  return seg + (ui.usub === 'wants' ? viewWants() : viewSale());
+}
+function viewSale() {
   const q = ui.uq.trim().toLowerCase();
-  let list = db.used.slice().sort((a, b) => b.boughtAt - a.boughtAt);
+  const av = db.used.filter(u => !u.soldAt);
+  const value = av.reduce((s, u) => s + n(u.buyPrice), 0);
+  const hot = av.filter(u => matchingWants(u).length).length;
+  let list = db.used.slice();
   if (q) list = list.filter(u => [u.model, u.imei, u.imei2, u.seller, u.cin, u.buyer, u.buyerCin].join(' ').toLowerCase().includes(q));
-  const inStock = db.used.filter(u => !u.soldAt).length;
+  const avail = list.filter(u => !u.soldAt).sort((a, b) => matchingWants(b).length - matchingWants(a).length || b.boughtAt - a.boughtAt);
+  const sold = list.filter(u => u.soldAt).sort((a, b) => b.soldAt - a.soldAt).slice(0, q ? 100 : 15);
   return `
-    <div class="grid2"><div class="card stat"><div class="v num">${inStock}</div><div class="l">عندي دابا</div></div>
-    <div class="card stat"><div class="v num">${db.used.length - inStock}</div><div class="l">تباعو</div></div></div>
+    <div class="grid2"><div class="card stat"><div class="v num">${av.length}</div><div class="l">تيليفون للبيع</div></div>
+    <div class="card stat"><div class="v">${money(value)}</div><div class="l">الفلوس اللي فيهم</div></div></div>
+    ${hot ? `<button class="banner match" style="margin:12px 0 0" data-act="usub" data-s="wants"><b>👥</b><span class="grow"><span class="num">${hot}</span> تيليفون عندك كاين اللي كيقلب عليه! صيفط ليهم ←</span></button>` : ''}
+    ${av.length ? `<div class="btns"><button class="btn wa" data-act="shareList">📋 صيفط اللائحة</button><button class="btn" data-act="usub" data-s="wants">🙋 طلب جديد</button></div>` : ''}
     <div style="height:12px"></div>
-    <input class="search" type="search" placeholder="🔎 IMEI، السمية، رقم البطاقة…" value="${h(ui.uq)}" data-input="uq" inputmode="search">
-    <div class="list">${list.length ? list.map(u => `<button class="card tk" data-act="usedOne" data-id="${u.id}">
-      <div class="tk-top"><span class="tk-model">📱 ${h(u.model)}</span><span class="pill ${u.soldAt ? 's-out' : 's-ready'}">${u.soldAt ? 'تباع' : 'عندي'}</span></div>
-      <div class="tk-sub"><span class="num">IMEI ${h(u.imei)}</span></div>
-      <div class="tk-sub"><span>من عند ${h(u.seller)} · <span class="num">${h(u.cin)}</span></span><span>${money(u.buyPrice)}</span></div></button>`).join('') : `<div class="empty"><i>📱</i>${db.used.length ? 'ماكاين والو' : 'سجّل كل تيليفون مستعمل كتشريه: IMEI + البطاقة ديال اللي باعو.'}</div>`}</div>
+    <input class="search" type="search" placeholder="🔎 الموديل، IMEI، السمية، البطاقة…" value="${h(ui.uq)}" data-input="uq">
+    <div class="list">${avail.length ? avail.map(usedCard).join('') : `<div class="empty"><i>📱</i>${db.used.length ? 'ماكاين حتى تيليفون للبيع' : 'سجّل كل تيليفون مستعمل كتشريه:<br>التصويرة + الثمن + IMEI + البطاقة ديال اللي باعو.'}</div>`}</div>
+    ${sold.length ? `<div class="sec">تباعو مؤخرا</div><div class="list" style="margin-top:0">${sold.map(usedCard).join('')}</div>` : ''}
     <div class="spacer"></div>
-    <button class="fab" data-act="newUsed">＋ تيليفون مستعمل</button>`;
+    <button class="fab" data-act="newUsed">＋ شريت تيليفون</button>`;
 }
 function usedForm(u) {
   const e = u || {};
   return `<h2>${u ? 'تعديل' : 'شريت تيليفون مستعمل'}</h2>
   <form class="f" data-form="used" autocomplete="off"><input type="hidden" name="id" value="${h(e.id || '')}">
-    <label>التيليفون *<input name="model" required value="${h(e.model)}" placeholder="مثلا: iPhone XR 64GB" autofocus></label>
+    <div class="photo" id="photoPrev" data-act="photoPick">${e.photo ? `<img src="${e.photo}" alt="">` : '📷 زيد تصويرة (كتعاون بزاف فالبيع)'}</div>
+    <input type="file" accept="image/*" data-photo-input hidden>
+    ${e.photo ? '<button type="button" class="btn ghost sm" data-act="photoDel">🗑 حيد التصويرة</button>' : ''}
+    <label>التيليفون *<input name="model" required value="${h(e.model)}" placeholder="مثلا: iPhone XR 64GB"></label>
+    <div class="two"><label>شريتو ب *<input name="buyPrice" required inputmode="decimal" value="${e.buyPrice ? h(e.buyPrice) : ''}" placeholder="0"></label>
+    <label>غادي نبيعو ب<input name="askPrice" inputmode="decimal" value="${e.askPrice ? h(e.askPrice) : ''}" placeholder="0"></label></div>
+    <label>الحالة<input name="notes" value="${h(e.notes)}" placeholder="مثلا: نقي، البطارية 85%، معاه الشارجور"></label>
     <label>IMEI * <span class="hint">(كتب *#06# باش يبان)</span><input name="imei" required inputmode="numeric" maxlength="15" value="${h(e.imei)}" placeholder="15 رقم" class="num" style="text-align:right"></label>
     <label>IMEI 2<input name="imei2" inputmode="numeric" maxlength="15" value="${h(e.imei2)}" placeholder="اختياري" class="num" style="text-align:right"></label>
     <div class="two"><label>سمية البائع *<input name="seller" required value="${h(e.seller)}"></label>
     <label>رقم البطاقة (CIN) *<input name="cin" required value="${h(e.cin)}" placeholder="AB123456" style="text-transform:uppercase"></label></div>
-    <div class="two"><label>تيليفون البائع<input name="sellerPhone" type="tel" value="${h(e.sellerPhone)}"></label>
-    <label>شريتو ب *<input name="buyPrice" required inputmode="decimal" value="${e.buyPrice ? h(e.buyPrice) : ''}" placeholder="0"></label></div>
-    <label>الحالة / ملاحظات<input name="notes" value="${h(e.notes)}" placeholder="مثلا: الشاشة فيها خط، البطارية 85%"></label>
+    <label>تيليفون البائع<input name="sellerPhone" type="tel" value="${h(e.sellerPhone)}"></label>
     <div class="err" id="usedErr"></div>
     <button class="btn pri block">حفظ</button>
     ${u ? `<button type="button" class="btn dan block" data-act="delUsed" data-id="${u.id}">🗑 حذف</button>` : ''}
   </form>`;
 }
 function usedDetail(u) {
-  return `<div class="row"><h2 class="grow">📱 ${h(u.model)}</h2><span class="pill ${u.soldAt ? 's-out' : 's-ready'}">${u.soldAt ? 'تباع' : 'عندي'}</span></div>
+  const mw = u.soldAt ? [] : matchingWants(u), d = daysIn(u);
+  const margin = n(u.askPrice) - n(u.buyPrice);
+  return `<div class="row"><h2 class="grow">📱 ${h(u.model)}</h2><span class="pill ${u.soldAt ? 's-out' : 's-ready'}">${u.soldAt ? 'تباع' : 'للبيع'}</span></div>
+  ${u.photo ? `<img class="hero" src="${u.photo}" alt="">` : ''}
+  ${!u.soldAt && d >= 21 ? `<div class="banner" style="cursor:default"><b>⏳</b><span>هاد التيليفون عندك من <span class="num">${d}</span> يوم. نقص شوية فالثمن ولا دير ليه ستوري فالواتساب.</span></div>` : ''}
+  ${mw.length ? `<div class="sec">👥 كليان كيقلبو على بحالو</div><div class="card">${mw.map(w => `<div class="line"><span>${h(w.name || '—')}${n(w.budget) ? ` <span class="hint">· الميزانية ${money(w.budget)}</span>` : ''}</span><button class="btn wa sm" data-act="offerWant" data-w="${w.id}" data-u="${u.id}">💬 صيفط ليه</button></div>`).join('')}</div>` : ''}
   <dl class="kv">
-    <dt>IMEI</dt><dd class="num">${h(u.imei)} ${luhnOk(u.imei) ? '✅' : '⚠️'}</dd>
-    ${u.imei2 ? `<dt>IMEI 2</dt><dd class="num">${h(u.imei2)}</dd>` : ''}
-    <dt>البائع</dt><dd>${h(u.seller)}</dd>
-    <dt>البطاقة</dt><dd class="num">${h(u.cin)}</dd>
-    ${u.sellerPhone ? `<dt>تيليفونو</dt><dd><a class="num" href="tel:${h(u.sellerPhone)}">${h(u.sellerPhone)}</a></dd>` : ''}
+    ${!u.soldAt ? `<dt>الثمن ديال البيع</dt><dd>${n(u.askPrice) ? money(u.askPrice) + ` <span class="hint">(ربح ${money(margin)})</span>` : '<span class="neg">ماحطيتيش الثمن</span>'}</dd>` : ''}
     <dt>شريتو ب</dt><dd>${money(u.buyPrice)} · <span class="num">${fmtDate(u.boughtAt)}</span></dd>
     ${u.notes ? `<dt>الحالة</dt><dd>${h(u.notes)}</dd>` : ''}
-    ${u.soldAt ? `<dt>بعتو ب</dt><dd>${money(u.sellPrice)} · <span class="num">${fmtDate(u.soldAt)}</span></dd>
+    <dt>IMEI</dt><dd class="num">${h(u.imei)} ${luhnOk(u.imei) ? '✅' : '⚠️'}</dd>
+    ${u.imei2 ? `<dt>IMEI 2</dt><dd class="num">${h(u.imei2)}</dd>` : ''}
+    <dt>البائع</dt><dd>${h(u.seller)} · <span class="num">${h(u.cin)}</span></dd>
+    ${u.sellerPhone ? `<dt>تيليفونو</dt><dd><a class="num" href="tel:${h(u.sellerPhone)}">${h(u.sellerPhone)}</a></dd>` : ''}
+    ${u.soldAt ? `<dt>بعتو ب</dt><dd>${money(u.sellPrice)} · <span class="num">${fmtDate(u.soldAt)}</span> · ${d} يوم</dd>
     <dt>الربح</dt><dd class="${n(u.sellPrice) - n(u.buyPrice) >= 0 ? 'pos' : 'neg'}">${money(n(u.sellPrice) - n(u.buyPrice))}</dd>
-    <dt>المشتري</dt><dd>${h(u.buyer || '—')}${u.buyerCin ? ` · <span class="num">${h(u.buyerCin)}</span>` : ''}</dd>` : ''}
+    <dt>المشتري</dt><dd>${h(u.buyer || '—')}${u.buyerCin ? ` · <span class="num">${h(u.buyerCin)}</span>` : ''}</dd>
+    <dt>الضمانة</dt><dd>${u.soldWarranty ? `${u.soldWarranty} يوم · حتى ${fmtDate(u.soldAt + u.soldWarranty * DAY)}` : 'بلا'}</dd>` : ''}
   </dl>
   <div class="btns">
-    ${u.soldAt ? `<button class="btn" data-act="unsell" data-id="${u.id}">↩︎ لغي البيع</button>` : `<button class="btn pri" data-act="sellUsed" data-id="${u.id}">💵 بعتو</button>`}
-    <button class="btn ghost" data-act="editUsed" data-id="${u.id}">✏️ تعديل</button>
+    ${u.soldAt ? `<button class="btn" data-act="unsell" data-id="${u.id}">↩︎ لغي البيع</button>${u.buyerPhone ? `<button class="btn wa" data-act="receipt" data-id="${u.id}">🧾 الوصل</button>` : ''}`
+      : `<button class="btn pri full" data-act="sellUsed" data-id="${u.id}">💵 بعتو</button>
+         <button class="btn wa" data-act="statusImg" data-id="${u.id}">📣 ستوري</button>
+         <button class="btn" data-act="shareOne" data-id="${u.id}">📤 شارك</button>`}
+    <button class="btn ghost full" data-act="editUsed" data-id="${u.id}">✏️ تعديل</button>
   </div>`;
 }
 function sellForm(u) {
   return `<h2>بيع · ${h(u.model)}</h2>
   <form class="f" data-form="sell" autocomplete="off">
-    <label>بعتو ب *<input name="sellPrice" required inputmode="decimal" placeholder="0" autofocus></label>
+    <div class="two"><label>بعتو ب *<input name="sellPrice" required inputmode="decimal" value="${n(u.askPrice) || ''}" placeholder="0"></label>
+    <label>الضمانة (أيام)<input name="soldWarranty" inputmode="numeric" value="${db.settings.usedWarrantyDays}"></label></div>
     <div class="two"><label>سمية المشتري<input name="buyer"></label><label>البطاقة ديالو<input name="buyerCin" style="text-transform:uppercase"></label></div>
-    <label>تيليفون المشتري<input name="buyerPhone" type="tel"></label>
+    <label>تيليفون المشتري<input name="buyerPhone" type="tel" placeholder="باش نصيفطو ليه الوصل"></label>
     <button class="btn pri block">أكّد البيع</button>
   </form>`;
 }
+
+/* wants */
+function viewWants() {
+  const open = db.wants.filter(w => !w.done).sort((a, b) => b.createdAt - a.createdAt);
+  const done = db.wants.filter(w => w.done).sort((a, b) => b.createdAt - a.createdAt).slice(0, 10);
+  const card = w => { const m = db.used.filter(u => wantMatches(w, u)).length;
+    return `<button class="card tk" data-act="editWant" data-id="${w.id}" style="${w.done ? 'opacity:.6' : ''}">
+      <div class="tk-top"><span class="tk-model">🙋 ${h(w.model)}</span>${m ? `<span class="pill match">✅ عندك ${m}</span>` : w.done ? '<span class="pill s-out">تقضى</span>' : `<span class="pill s-in">كيتسنا · ${ago(w.createdAt)}</span>`}</div>
+      <div class="tk-sub"><span>👤 ${h(w.name || '—')}</span>${n(w.budget) ? `<span>الميزانية ${money(w.budget)}</span>` : ''}${w.notes ? `<span>${h(w.notes)}</span>` : ''}</div></button>`; };
+  return `<p class="hint" style="margin:0 2px 10px">كليان جا كيقلب على تيليفون وماكانش؟ سجّلو هنا. ملي تشري شي واحد بحالو، "واجد" كيعلمك باش تصيفط ليه.</p>
+    <div class="list" style="margin-top:0">${open.length ? open.map(card).join('') : '<div class="empty"><i>🙋</i>ماكاين حتى طلب</div>'}</div>
+    ${done.length ? `<div class="sec">تقضاو</div><div class="list" style="margin-top:0">${done.map(card).join('')}</div>` : ''}
+    <div class="spacer"></div>
+    <button class="fab" data-act="newWant">＋ طلب جديد</button>`;
+}
+function wantForm(w) {
+  const e = w || {};
+  const m = w ? db.used.filter(u => wantMatches(w, u)) : [];
+  return `<h2>${w ? 'طلب ديال ' + h(w.name || 'كليان') : 'كليان باغي تيليفون'}</h2>
+  ${m.length ? `<div class="sec">✅ عندك اللي كيقلب عليه</div><div class="card">${m.map(u => `<div class="line"><span>📱 ${h(u.model)}${n(u.askPrice) ? ' · ' + money(u.askPrice) : ''}</span><button class="btn wa sm" data-act="offerWant" data-w="${w.id}" data-u="${u.id}">💬 صيفط</button></div>`).join('')}</div><div style="height:12px"></div>` : ''}
+  <form class="f" data-form="want" autocomplete="off"><input type="hidden" name="id" value="${h(e.id || '')}">
+    <label>شنو باغي؟ *<input name="model" required value="${h(e.model)}" placeholder="مثلا: iPhone 11، Redmi Note"></label>
+    <div class="two"><label>السمية<input name="name" value="${h(e.name)}"></label>
+    <label>التيليفون *<input name="phone" type="tel" required value="${h(e.phone)}" placeholder="06…"></label></div>
+    <div class="two"><label>الميزانية (حتى ل)<input name="budget" inputmode="decimal" value="${e.budget ? h(e.budget) : ''}" placeholder="0"></label>
+    <label>ملاحظات<input name="notes" value="${h(e.notes)}" placeholder="اللون، الذاكرة…"></label></div>
+    <button class="btn pri block">حفظ</button>
+    ${w ? `<div class="btns" style="margin-top:0"><button type="button" class="btn" data-act="wantDone" data-id="${w.id}">${w.done ? '↩︎ رجعو' : '✓ تقضى'}</button><button type="button" class="btn dan" data-act="delWant" data-id="${w.id}">🗑 حذف</button></div>` : ''}
+  </form>`;
+}
+const wantDetail = w => wantForm(w);
+function offerPickSheet(t) {
+  const av = db.used.filter(u => !u.soldAt).sort((a, b) => n(a.askPrice) - n(b.askPrice));
+  return `<h2>📱 عرض على ${h(t.name || 'الكليان')}</h2>
+  <p class="hint" style="margin-top:0">الإصلاح غالي ولا التيليفون قديم؟ اقترح عليه يشري واحد من عندك (وتقدر تشري منو القديم).</p>
+  <div class="card">${av.map(u => `<div class="line"><span>${h(u.model)}${n(u.askPrice) ? ' · ' + money(u.askPrice) : ''}</span><button class="btn wa sm" data-act="offerTicket" data-t="${t.id}" data-u="${u.id}">💬 اقترح</button></div>`).join('')}</div>`;
+}
+
+/* accessories */
+function quickSaleForm(it) {
+  return `<h2>💵 بيع · ${h(it.name)}</h2>
+  <form class="f" data-form="qsale"><div class="two">
+    <label>الثمن (للوحدة)<input name="price" inputmode="decimal" value="${n(it.sellPrice) || ''}"></label>
+    <label>الكمية (باقي ${it.qty})<input name="qty" inputmode="numeric" value="1"></label></div>
+    <button class="btn pri block">أكّد البيع</button></form>`;
+}
+function recordSale(it, q, unitPrice, ticketId) {
+  it.qty = Math.max(0, it.qty - q);
+  db.sales.push({ id: uid(), stockId: it.id, label: it.name, qty: q, price: unitPrice * q, cost: n(it.cost) * q, date: now(), ticketId: ticketId || null });
+  return unitPrice * q;
+}
+
+/* photos & sharing */
+function compressPhoto(file, max = 720) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onerror = rej;
+    r.onload = () => {
+      const img = new Image();
+      img.onerror = rej;
+      img.onload = () => {
+        const k = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        res(c.toDataURL('image/jpeg', 0.72));
+      };
+      img.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+const loadImg = src => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+function rrect(x, X, Y, W, H, r) { x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + W, Y, X + W, Y + H, r); x.arcTo(X + W, Y + H, X, Y + H, r); x.arcTo(X, Y + H, X, Y, r); x.arcTo(X, Y, X + W, Y, r); x.closePath(); }
+function wrapLines(x, text, maxW) {
+  const words = String(text).split(/\s+/), lines = []; let cur = '';
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (x.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
+  if (cur) lines.push(cur); return lines;
+}
+let shareFile = null;
+async function statusImage(u) {
+  toast('⏳ كنوجد التصويرة…');
+  try { await Promise.all([document.fonts.load('800 90px Cairo'), document.fonts.load('600 46px Cairo')]); } catch (e) {}
+  const W = 1080, H = 1920, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const F = (w, sz) => `${w} ${sz}px Cairo, "Geeza Pro", "Noto Sans Arabic", sans-serif`;
+  const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0f766e'); g.addColorStop(1, '#042f2e');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  x.direction = 'rtl'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = '#5eead4'; x.font = F(800, 56); x.fillText('📱 للبيع', W / 2, 140);
+  let y = 220;
+  if (u.photo) {
+    const img = await loadImg(u.photo), bw = 900, bh = 900, bx = (W - bw) / 2;
+    const k = Math.max(bw / img.width, bh / img.height), dw = img.width * k, dh = img.height * k;
+    x.save(); rrect(x, bx, y, bw, bh, 48); x.clip(); x.drawImage(img, bx + (bw - dw) / 2, y + (bh - dh) / 2, dw, dh); x.restore();
+    y += bh + 90;
+  } else { x.font = '320px sans-serif'; x.fillText('📱', W / 2, 560); y = 860; }
+  x.fillStyle = '#fff'; x.font = F(800, 92);
+  wrapLines(x, u.model, 960).slice(0, 2).forEach(l => { x.fillText(l, W / 2, y); y += 110; });
+  if (u.notes) { x.font = F(600, 46); x.fillStyle = 'rgba(255,255,255,.85)'; wrapLines(x, u.notes, 940).slice(0, 2).forEach(l => { x.fillText(l, W / 2, y); y += 62; }); }
+  if (n(u.askPrice)) {
+    y += 80; x.font = F(800, 100); const pt = moneyTxt(u.askPrice), pw = x.measureText(pt).width + 120;
+    x.fillStyle = '#fbbf24'; rrect(x, (W - pw) / 2, y - 80, pw, 160, 80); x.fill();
+    x.fillStyle = '#1c1917'; x.fillText(pt, W / 2, y + 4); y += 130;
+  }
+  if (db.settings.usedWarrantyDays) { x.fillStyle = '#86efac'; x.font = F(700, 48); x.fillText(`✅ مضمون ${db.settings.usedWarrantyDays} يوم`, W / 2, Math.min(y + 40, 1660)); }
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.fillRect(0, H - 200, W, 200);
+  x.fillStyle = '#fff'; x.font = F(800, 58); x.fillText(shopName(), W / 2, H - 140);
+  x.font = F(600, 42); x.fillStyle = 'rgba(255,255,255,.9)';
+  x.fillText([db.settings.shopPhone && '📞 ' + db.settings.shopPhone, db.settings.shopAddr && '📍 ' + db.settings.shopAddr].filter(Boolean).join('   ') || ' ', W / 2, H - 70);
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9));
+  shareFile = new File([blob], `wajed-${u.id}.jpg`, { type: 'image/jpeg' });
+  const url = URL.createObjectURL(blob);
+  const canShare = navigator.canShare && navigator.canShare({ files: [shareFile] });
+  openSheet(`<h2>📣 ستوري الواتساب</h2>
+    <img src="${url}" alt="" style="width:100%;border-radius:14px;display:block">
+    <div class="btns">${canShare ? '<button class="btn wa full" data-act="shareImg">📤 شارك (Statut / مجموعة / Instagram)</button>' : ''}
+    <a class="btn full" href="${url}" download="wajed-${h(u.model)}.jpg">⬇️ سجّل التصويرة</a></div>
+    <p class="hint">فالآيفون: إلا ماخدماتش، ضغط مطول على التصويرة ← Enregistrer، ومن بعد حطها فـ Statut ديال الواتساب.</p>`);
+}
+async function shareText(text) {
+  if (navigator.share) { try { await navigator.share({ text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+}
+function shareList() { shareText(listText()); }
 
 /* ---------- Settings ---------- */
 function settingsSheet() {
@@ -667,7 +886,9 @@ function settingsSheet() {
   <form class="f" data-form="settings">
     <label>سمية الحانوت<input name="shopName" value="${h(s.shopName)}" placeholder="مثلا: GSM Berkane"></label>
     <label>تيليفون الحانوت (كيبان فالميساجات)<input name="shopPhone" type="tel" value="${h(s.shopPhone)}"></label>
-    <div class="two"><label>الضمانة العادية (أيام)<input name="warrantyDays" inputmode="numeric" value="${s.warrantyDays}"></label>
+    <label>العنوان (كيبان فالإعلانات)<input name="shopAddr" value="${h(s.shopAddr)}" placeholder="مثلا: شارع محمد الخامس، بركان"></label>
+    <label>ضمانة التيليفونات المستعملة (أيام)<input name="usedWarrantyDays" inputmode="numeric" value="${s.usedWarrantyDays}"></label>
+    <div class="two"><label>ضمانة الإصلاح (أيام)<input name="warrantyDays" inputmode="numeric" value="${s.warrantyDays}"></label>
     <label>فكّرني من بعد (أيام)<input name="reminderDays" inputmode="numeric" value="${s.reminderDays}"></label></div>
     <label>نبهني ملي الستوك يوصل ل<input name="lowStock" inputmode="numeric" value="${s.lowStock}"></label>
     <button class="btn pri block">حفظ</button>
@@ -679,7 +900,7 @@ function settingsSheet() {
     <label class="btn" style="cursor:pointer">⬆️ رجّع نسخة<input type="file" accept="application/json,.json" data-act-change="importData" hidden></label>
     <button class="btn dan full" data-act="resetAll">🗑 مسح كلشي</button>
   </div>
-  <p class="hint" style="text-align:center;margin-top:18px">واجد · النسخة 1.1</p>`;
+  <p class="hint" style="text-align:center;margin-top:18px">واجد · النسخة 1.2</p>`;
 }
 
 /* ================= Actions ================= */
@@ -698,7 +919,7 @@ const A = {
   pickSrc: d => { const t = tById(sheetCtx.id); sheetCtx.src = d.src; const keep = { id: t.id, src: d.src }; openSheet(readySheet(t), keep); },
   toOut: d => openSheet(outSheet(tById(d.id)), { id: d.id }),
   wa: d => { const t = tById(d.id); if (!hasContact(t)) { toast('ماكاين حتى رقم. زيدو فـ ✏️ تعديل'); return; } askSend(t, waType(t)); },
-  send: d => { const t = tById(d.id); sendTo(t[d.k], message(d.type, t, d.k === 'phone2'), d.via); },
+  sendRaw: d => { const m = sheetCtx.msgs?.[+d.i]; if (m) sendTo(m.num, m.text, d.via); },
   warrantyBack: d => {
     const o = tById(d.id);
     const t = { id: uid(), no: db.seq++, name: o.name, phone: o.phone, model: o.model, issue: 'ضمانة: ' + (o.issue || ''), code: o.code, price: 0, advance: 0, notes: '', status: 'in', createdAt: now(), warrantyOf: o.id };
@@ -751,10 +972,26 @@ const A = {
     if (db.credits.some(c => c.shop === d.shop)) openSheet(shopSheet(d.shop), { shop: d.shop }); else closeSheet();
   },
   // used
-  newUsed: () => openSheet(usedForm()),
+  newUsed: () => openSheet(usedForm(), { photo: '' }),
   usedOne: d => openSheet(usedDetail(db.used.find(u => u.id === d.id))),
-  editUsed: d => openSheet(usedForm(db.used.find(u => u.id === d.id))),
+  editUsed: d => { const u = db.used.find(x => x.id === d.id); openSheet(usedForm(u), { photo: u.photo || '' }); },
   sellUsed: d => openSheet(sellForm(db.used.find(u => u.id === d.id)), { id: d.id }),
+  usub: d => { ui.usub = d.s; ui.tab = 'used'; closeSheet(); render(); },
+  photoPick: () => $('#sheet [data-photo-input]')?.click(),
+  photoDel: () => { sheetCtx.photo = ''; const im = $('#sheet #photoPrev'); if (im) im.innerHTML = '📷 زيد تصويرة'; },
+  shareList: () => shareList(),
+  shareOne: d => shareText(offerText(db.used.find(u => u.id === d.id))),
+  statusImg: d => statusImage(db.used.find(u => u.id === d.id)).catch(() => toast('ماقدرتش نوجد التصويرة')),
+  shareImg: async () => { try { await navigator.share({ files: [shareFile] }); } catch (e) {} },
+  receipt: d => { const u = db.used.find(x => x.id === d.id); sendSheet('🧾 الوصل', [{ who: u.buyer || 'المشتري', num: u.buyerPhone, text: receiptText(u) }]); },
+  newWant: () => openSheet(wantForm()),
+  editWant: d => openSheet(wantForm(db.wants.find(w => w.id === d.id))),
+  delWant: d => { if (!confirm('نحذفو هاد الطلب؟')) return; db.wants = db.wants.filter(w => w.id !== d.id); save(); closeSheet(); render(); },
+  wantDone: d => { const w = db.wants.find(x => x.id === d.id); w.done = !w.done; save(); closeSheet(); render(); toast(w.done ? '✓ تقضى' : 'رجع للطلبات'); },
+  offerWant: d => { const w = db.wants.find(x => x.id === d.w), u = db.used.find(x => x.id === d.u); sendSheet(`📱 عرض ل ${h(w.name || 'الكليان')}`, [{ who: w.name || 'الكليان', num: w.phone, text: offerText(u, w.name) }]); },
+  offerPick: d => openSheet(offerPickSheet(tById(d.id)), { id: d.id }),
+  offerTicket: d => { const t = tById(d.t), u = db.used.find(x => x.id === d.u); sendSheet(`📱 عرض ${h(u.model)}`, ticketTargets(t, other => offerText(u, other ? '' : t.name))); },
+  quickSale: d => openSheet(quickSaleForm(db.stock.find(x => x.id === d.id)), { id: d.id }),
   unsell: d => {
     const u = db.used.find(x => x.id === d.id);
     if (!confirm('نلغيو البيع؟')) return;
@@ -824,11 +1061,15 @@ const F = {
   out: v => {
     const t = tById(sheetCtx.id);
     t.price = n(v.price); t.warrantyDays = Math.max(0, parseInt(v.warrantyDays) || 0);
-    t.status = 'out'; t.outAt = now(); save(); render();
+    t.status = 'out'; t.outAt = now();
+    let extra = 0;
+    Object.keys(v).filter(k => k.startsWith('acc_') && v[k]).forEach(k => { const it = db.stock.find(x => x.id === k.slice(4)); if (it) extra += recordSale(it, 1, n(it.sellPrice), t.id); });
+    save(); render();
+    if (extra) setTimeout(() => toast(`🛍️ + ${moneyTxt(extra)} أكسسوار`), 2700);
     if (hasContact(t)) askSend(t, 'out', `📦 #${t.no} تسلم`); else { closeSheet(); toast(`📦 #${t.no} تسلم`); }
   },
   stock: v => {
-    const f = { name: v.name.trim(), model: v.model.trim(), qty: Math.max(0, parseInt(v.qty) || 0), cost: n(v.cost) };
+    const f = { name: v.name.trim(), model: v.model.trim(), kind: v.kind === 'acc' ? 'acc' : 'part', qty: Math.max(0, parseInt(v.qty) || 0), cost: n(v.cost), sellPrice: n(v.sellPrice) };
     if (v.id) Object.assign(db.stock.find(s => s.id === v.id), f); else db.stock.push(Object.assign({ id: uid() }, f));
     save(); closeSheet(); render(); toast('تحفظ ✓');
   },
@@ -845,19 +1086,37 @@ const F = {
     const dup = db.used.find(u => u.id !== v.id && (u.imei === imei || u.imei2 === imei));
     if (dup && !confirm(`⚠️ هاد IMEI ديجا مسجل (${dup.model}، من عند ${dup.seller}). نكملو؟`)) return;
     if (!luhnOk(imei) && !confirm('⚠️ هاد IMEI ماشي صحيح (الرقم الأخير ما كيتوافقش). نكملو؟')) return;
-    const f = { model: v.model.trim(), imei, imei2, seller: v.seller.trim(), cin: v.cin.trim().toUpperCase(), sellerPhone: v.sellerPhone.trim(), buyPrice: n(v.buyPrice), notes: v.notes.trim() };
+    const f = { model: v.model.trim(), imei, imei2, seller: v.seller.trim(), cin: v.cin.trim().toUpperCase(), sellerPhone: v.sellerPhone.trim(), buyPrice: n(v.buyPrice), askPrice: n(v.askPrice), notes: v.notes.trim(), photo: sheetCtx.photo || '' };
     let u;
     if (v.id) { u = db.used.find(x => x.id === v.id); Object.assign(u, f); }
     else { u = Object.assign({ id: uid(), boughtAt: now(), soldAt: null }, f); db.used.push(u); }
-    save(); render(); openSheet(usedDetail(u)); toast('تسجل ✓');
+    save(); render(); openSheet(usedDetail(u));
+    const m = matchingWants(u);
+    toast(m.length ? `👥 ${m.length} كليان كيقلبو على بحال هادا!` : 'تسجل ✓');
   },
   sell: v => {
     const u = db.used.find(x => x.id === sheetCtx.id);
-    Object.assign(u, { sellPrice: n(v.sellPrice), buyer: v.buyer.trim(), buyerCin: v.buyerCin.trim().toUpperCase(), buyerPhone: v.buyerPhone.trim(), soldAt: now() });
-    save(); render(); openSheet(usedDetail(u)); toast('💵 تباع');
+    Object.assign(u, { sellPrice: n(v.sellPrice), buyer: v.buyer.trim(), buyerCin: v.buyerCin.trim().toUpperCase(), buyerPhone: v.buyerPhone.trim(), soldWarranty: Math.max(0, parseInt(v.soldWarranty) || 0), soldAt: now() });
+    save(); render(); toast('💵 تباع');
+    if (u.buyerPhone) sendSheet('🧾 صيفط الوصل للمشتري', [{ who: u.buyer || 'المشتري', num: u.buyerPhone, text: receiptText(u) }], 'الوصل فيه IMEI والضمانة: كيعطي الثقة للمشتري وكيخليه يرجع عندك.');
+    else openSheet(usedDetail(u));
+  },
+  want: v => {
+    const f = { name: v.name.trim(), phone: v.phone.trim(), model: v.model.trim(), budget: n(v.budget), notes: v.notes.trim() };
+    let w;
+    if (v.id) { w = db.wants.find(x => x.id === v.id); Object.assign(w, f); } else { w = Object.assign({ id: uid(), createdAt: now(), done: false }, f); db.wants.push(w); }
+    save(); ui.usub = 'wants'; render();
+    const m = db.used.filter(u => wantMatches(w, u));
+    if (m.length) { openSheet(wantForm(w)); toast('✅ عندك اللي كيقلب عليه!'); } else { closeSheet(); toast('✓ تسجل. غادي نعلمك ملي يوصل بحالو'); }
+  },
+  qsale: v => {
+    const it = db.stock.find(x => x.id === sheetCtx.id);
+    const q = Math.max(1, parseInt(v.qty) || 1);
+    if (q > it.qty) { toast(`باقي غير ${it.qty}`); return; }
+    recordSale(it, q, n(v.price)); save(); closeSheet(); render(); toast(`💵 تباع: ${moneyTxt(n(v.price) * q)}`);
   },
   settings: v => {
-    Object.assign(db.settings, { shopName: v.shopName.trim(), shopPhone: v.shopPhone.trim(), warrantyDays: Math.max(0, parseInt(v.warrantyDays) || 0), reminderDays: Math.max(1, parseInt(v.reminderDays) || 3), lowStock: Math.max(0, parseInt(v.lowStock) || 0) });
+    Object.assign(db.settings, { shopName: v.shopName.trim(), shopPhone: v.shopPhone.trim(), shopAddr: v.shopAddr.trim(), usedWarrantyDays: Math.max(0, parseInt(v.usedWarrantyDays) || 0), warrantyDays: Math.max(0, parseInt(v.warrantyDays) || 0), reminderDays: Math.max(1, parseInt(v.reminderDays) || 3), lowStock: Math.max(0, parseInt(v.lowStock) || 0) });
     save(); closeSheet(); render(); toast('تحفظ ✓');
   }
 };
@@ -889,6 +1148,11 @@ document.addEventListener('input', e => {
   }, 180);
 });
 document.addEventListener('change', e => {
+  if (e.target.matches('[data-photo-input]')) {
+    const f = e.target.files[0]; if (!f) return;
+    compressPhoto(f).then(url => { sheetCtx.photo = url; const im = $('#sheet #photoPrev'); if (im) im.innerHTML = `<img src="${url}" alt="">`; }).catch(() => toast('ماقدرتش نقرا التصويرة'));
+    return;
+  }
   if (e.target.dataset.actChange !== 'importData') return;
   const file = e.target.files[0]; if (!file) return;
   const r = new FileReader();
