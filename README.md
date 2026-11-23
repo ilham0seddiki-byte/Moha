@@ -19,4 +19,9 @@
 
 ## Escucha Palabras (`es/`)
 
-`es/index.html`: كتب كلمة بالإسبانية (بحال *gracias*) وكيطلعو ليك فيديوهات ديال ناس كيقولوها (عن طريق YouGlish)، مع روابط لـ TikTok وYouTube وInstagram والترجمة للعربية.
+`es/index.html`: كتب كلمة بالإسبانية (بحال *gracias*) وكيطلعو ليك فيديوهات ديال ناس كيقولوها، والفيديو كيبدا فالثانية اللي تقالت فيها.
+المحرك ديالنا: ما كيعتمدش على YouGlish.
+
+- `es/corpus/*.tsv`: النص ديال كل فيديو مع الوقت (فيديو واحد = فيشي واحد).
+- `scripts/import_transcripts.py`: كيحوّل النتيجة ديال Firecrawl (`youtube-com/videos/video_transcript`) لـ `.tsv`.
+- `scripts/build_corpus.py`: كيجمع كاع الفيشيات فـ `es/corpus.js` (خاصك تعاودو كل مرة تزيد فيديو).
