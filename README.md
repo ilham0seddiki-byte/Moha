@@ -17,7 +17,6 @@
 `.github/workflows/pages.yml` كينشر على GitHub Pages مع كل push لـ `main`.
 مرة وحدة: Settings ← Pages ← Source: **GitHub Actions**.
 
-## الموقع بالإسبانية (`es/`)
+## Escucha Palabras (`es/`)
 
-`es/index.html`: موقع باش تجيب الكليان، كامل بالإسبانية. بدّل المعلومات ديال الحانوت فـ `TIENDA` (لتحت فالفيشي).
-البوطونة **🎓 Aprender** كتبيّن الترجمة بالدارجة تحت كل جملة، باش تتعلم الإسبانية.
+`es/index.html`: كتب كلمة بالإسبانية (بحال *gracias*) وكيطلعو ليك فيديوهات ديال ناس كيقولوها (عن طريق YouGlish)، مع روابط لـ TikTok وYouTube وInstagram والترجمة للعربية.
