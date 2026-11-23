@@ -25,3 +25,4 @@
 - `es/corpus/*.tsv`: النص ديال كل فيديو مع الوقت (فيديو واحد = فيشي واحد).
 - `scripts/import_transcripts.py`: كيحوّل النتيجة ديال Firecrawl (`youtube-com/videos/video_transcript`) لـ `.tsv`.
 - `scripts/build_corpus.py`: كيجمع كاع الفيشيات فـ `es/corpus.js` (خاصك تعاودو كل مرة تزيد فيديو).
+- `worker/`: الباحث المباشر فيوتيوب (Cloudflare Worker). شوف `worker/README.md` باش تحطو.

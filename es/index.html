@@ -67,6 +67,8 @@ mark{background:var(--hl);color:var(--hl-ink);border-radius:4px;padding:0 1px}
 .social a:hover{border-color:var(--brand)}
 footer{text-align:center;color:var(--muted);font-size:.85rem;padding:28px 0 40px}
 [hidden]{display:none!important}
+.spin{animation:spin 1.2s linear infinite;display:inline-block!important}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -116,9 +118,11 @@ footer{text-align:center;color:var(--muted);font-size:.85rem;padding:28px 0 40px
         <div class="list" id="list"></div>
       </div>
 
+      <div class="empty" id="live" hidden><b class="spin">🔎</b>Buscando en YouTube…<br><span class="dr">كنقلبو فيوتيوب…</span></div>
+      <p class="dr" id="liveErr" hidden style="text-align:center;margin-top:10px">No se pudo buscar en YouTube ahora mismo · ما قدرناش نقلبو فيوتيوب دابا</p>
       <div class="empty" id="none" hidden>
-        <b>🤷</b>Todavía no tenemos esta palabra en nuestros vídeos.<br>
-        <span class="dr">هاد الكلمة مازال ما كايناش فالفيديوهات ديالنا</span>
+        <b>🤷</b>No encontramos vídeos con esta palabra.<br>
+        <span class="dr">ما لقيناش فيديوهات فيهم هاد الكلمة</span>
       </div>
     </div>
 
@@ -137,6 +141,8 @@ footer{text-align:center;color:var(--muted);font-size:.85rem;padding:28px 0 40px
 <script>
 const $ = id => document.getElementById(id);
 const DATA = window.CORPUS || [];
+// URL del buscador en vivo (Cloudflare Worker, ver worker/README.md). Vacío = solo vídeos guardados.
+const API = '';
 const SUGERENCIAS = ['gracias', 'hola', 'por favor', 'me gusta', 'vale', 'claro', 'adiós', 'perdón', '¿de dónde eres?', '¿cómo te llamas?', 'tengo', 'quiero', 'no sé', 'vamos', 'me encanta', 'perfecto'];
 
 // Normaliza carácter a carácter (misma longitud) para buscar sin acentos ni signos
@@ -146,6 +152,12 @@ const NORM = DATA.map(v => v[3].map(s => norm(s[1])));
 const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
+function clip(vi, i, span) {
+  const [id, title, channel, s] = DATA[vi];
+  return { id, title, channel, t: s[i][0], before: s[i - 1] ? s[i - 1][1] : '',
+    line: span === 2 ? s[i][1] + ' ' + s[i + 1][1] : s[i][1], after: s[i + span] ? s[i + span][1] : '' };
+}
+
 function find(q) {
   const k = norm(q).trim().replace(/\s+/g, ' ');
   if (!k) return [];
@@ -153,8 +165,8 @@ function find(q) {
   const perVideo = DATA.map((v, vi) => {
     const hits = [];
     NORM[vi].forEach((line, i) => {
-      if (re.test(line)) hits.push({ vi, i, span: 1 });
-      else if (k.includes(' ') && i + 1 < NORM[vi].length && re.test(line + ' ' + NORM[vi][i + 1]) && !re.test(NORM[vi][i + 1])) hits.push({ vi, i, span: 2 });
+      if (re.test(line)) hits.push(clip(vi, i, 1));
+      else if (k.includes(' ') && i + 1 < NORM[vi].length && re.test(line + ' ' + NORM[vi][i + 1]) && !re.test(NORM[vi][i + 1])) hits.push(clip(vi, i, 2));
     });
     return hits;
   });
@@ -175,20 +187,19 @@ function highlight(text, q) {
   return out + esc(text.slice(last));
 }
 
-let hits = [], cur = 0, query = '';
+let hits = [], cur = 0, query = '', searchId = 0;
 
 function play(n) {
   if (!hits.length) return;
   cur = (n + hits.length) % hits.length;
-  const { vi, i, span } = hits[cur], [id, title, ch, segs] = DATA[vi];
+  const { id, title, channel, t, before, line, after } = hits[cur];
   // Clip corto: ~1 s antes de la frase y se para a los ~4 s
-  const t = segs[i][0], start = Math.max(0, Math.floor(t) - 1), end = start + 4;
+  const start = Math.max(0, Math.floor(t) - 1), end = start + 4;
   $('player').src = `https://www.youtube-nocookie.com/embed/${id}?start=${start}&end=${end}&autoplay=1&rel=0&playsinline=1&modestbranding=1`;
-  const text = span === 2 ? segs[i][1] + ' ' + segs[i + 1][1] : segs[i][1];
-  $('line').innerHTML = highlight(text, query);
-  $('before').textContent = segs[i - 1] ? segs[i - 1][1] : '';
-  $('after').textContent = segs[i + span] ? segs[i + span][1] : '';
-  $('src').textContent = `${ch ? ch + ' · ' : ''}${title} · ${fmt(t)}`;
+  $('line').innerHTML = highlight(line, query);
+  $('before').textContent = before;
+  $('after').textContent = after;
+  $('src').textContent = `${channel ? channel + ' · ' : ''}${title} · ${fmt(t)}`;
   $('yt').href = `https://www.youtube.com/watch?v=${id}&t=${start}s`;
   $('count').textContent = `${cur + 1} de ${hits.length}`;
   document.querySelectorAll('.row').forEach((r, j) => r.classList.toggle('on', j === cur));
@@ -208,23 +219,47 @@ function socialLinks(w) {
   ].map(([n, u]) => `<a href="${u}" target="_blank" rel="noopener">${n}</a>`).join('');
 }
 
+function render(loading) {
+  $('found').hidden = !hits.length;
+  $('none').hidden = !!hits.length || loading;
+  $('live').hidden = !loading;
+  if (!hits.length) { $('player').removeAttribute('src'); $('count').textContent = loading ? '' : '0 resultados'; }
+  $('list').innerHTML = hits.map((h, j) =>
+    `<button class="row" type="button" data-j="${j}"><b>${fmt(h.t)}</b><span>${highlight(h.line, query)}</span></button>`).join('');
+  document.querySelectorAll('.row').forEach(r => r.onclick = () => play(+r.dataset.j));
+}
+
+async function searchLive(w, id) {
+  try {
+    const r = await fetch(`${API}?q=${encodeURIComponent(w)}`);
+    const data = await r.json();
+    if (id !== searchId) return;
+    if (!r.ok) throw new Error(data.error || r.status);
+    const seen = new Set(hits.map(h => h.id + Math.floor(h.t)));
+    const fresh = (data.clips || []).filter(c => !seen.has(c.id + Math.floor(c.t)));
+    const first = !hits.length;
+    hits = hits.concat(fresh);
+    render(false);
+    if (first && hits.length) play(0); else if (hits.length) $('count').textContent = `${cur + 1} de ${hits.length}`;
+  } catch (e) {
+    if (id !== searchId) return;
+    render(false);
+    $('liveErr').hidden = false;
+  }
+}
+
 function search(w) {
   w = (w || '').trim(); if (!w) return;
+  const id = ++searchId;
   query = w; $('q').value = w; addHist(w);
-  hits = find(w);
-  $('start').hidden = true; $('result').hidden = false;
+  hits = find(w); cur = 0;
+  $('start').hidden = true; $('result').hidden = false; $('liveErr').hidden = true;
   $('word').textContent = w;
-  $('found').hidden = !hits.length; $('none').hidden = !!hits.length;
-  $('count').textContent = hits.length ? '' : '0 resultados';
-  $('list').innerHTML = hits.map(({ vi, i, span }, j) => {
-    const s = DATA[vi][3], text = span === 2 ? s[i][1] + ' ' + s[i + 1][1] : s[i][1];
-    return `<button class="row" type="button" data-j="${j}"><b>${fmt(s[i][0])}</b><span>${highlight(text, w)}</span></button>`;
-  }).join('');
-  document.querySelectorAll('.row').forEach(r => r.onclick = () => play(+r.dataset.j));
-  if (!hits.length) $('player').removeAttribute('src');
+  render(!!API);
   socialLinks(w);
   try { history.replaceState(null, '', '#' + encodeURIComponent(w)); } catch (_) {}
   if (hits.length) play(0);
+  if (API) searchLive(w, id);
   $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 $('f').addEventListener('submit', e => { e.preventDefault(); search($('q').value); });
@@ -249,7 +284,7 @@ $('speak').onclick = () => {
   speechSynthesis.cancel(); speechSynthesis.speak(u);
 };
 
-$('foot').textContent = `${DATA.length} vídeos · ${DATA.reduce((a, v) => a + v[3].length, 0).toLocaleString('es')} frases · Vídeos de YouTube`;
+$('foot').textContent = (API ? 'Búsqueda en vivo en YouTube + ' : '') + `${DATA.length} vídeos guardados · ${DATA.reduce((a, v) => a + v[3].length, 0).toLocaleString('es')} frases`;
 const start = decodeURIComponent(location.hash.slice(1));
 if (start) search(start);
 </script>
