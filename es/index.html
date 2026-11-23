@@ -181,8 +181,9 @@ function play(n) {
   if (!hits.length) return;
   cur = (n + hits.length) % hits.length;
   const { vi, i, span } = hits[cur], [id, title, ch, segs] = DATA[vi];
-  const t = segs[i][0], start = Math.max(0, Math.floor(t) - 1);
-  $('player').src = `https://www.youtube-nocookie.com/embed/${id}?start=${start}&autoplay=1&rel=0&playsinline=1&modestbranding=1`;
+  // Clip corto: ~1 s antes de la frase y se para a los ~4 s
+  const t = segs[i][0], start = Math.max(0, Math.floor(t) - 1), end = start + 4;
+  $('player').src = `https://www.youtube-nocookie.com/embed/${id}?start=${start}&end=${end}&autoplay=1&rel=0&playsinline=1&modestbranding=1`;
   const text = span === 2 ? segs[i][1] + ' ' + segs[i + 1][1] : segs[i][1];
   $('line').innerHTML = highlight(text, query);
   $('before').textContent = segs[i - 1] ? segs[i - 1][1] : '';
